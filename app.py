@@ -66,7 +66,7 @@ class Renderer(QThread):
             h, w, ch = frame.shape
             bytes_per_line = ch * w
             convert_to_Qt_format = QImage(
-                frame.data, w, h, bytes_per_line, QImage.Format_RGB888
+                frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888
             )
             p = convert_to_Qt_format.scaled(self.width, self.height)
             self.change_pixmap_signal.emit(p)
@@ -341,7 +341,7 @@ class VideoWindow(QMainWindow):
     def scale_image(self):
         if self.qt_img is not None:
             scaled_pixmap = self.qt_img.scaled(
-                self.image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                self.image_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
             )
             self.image_label.setPixmap(scaled_pixmap)
 
