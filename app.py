@@ -4,7 +4,7 @@ from collections import deque
 from queue import Empty, Queue
 from time import sleep
 
-import onnxruntime as ort
+# import onnxruntime as ort
 
 
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
