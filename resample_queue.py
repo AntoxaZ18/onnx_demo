@@ -6,11 +6,7 @@ class ResampleQueue:
     '''
     очередь от видеопотока, делает равномерную выборку если производительности нейросетки не хватает
     '''
-    def __init__(self, get_frames=8):
-        '''
-        get_frames - размер батча для нейронки
-        '''
-        self.batch_size = get_frames
+    def __init__(self):
         self.queue = Queue()
         self.lock = Lock()
 
@@ -25,16 +21,18 @@ class ResampleQueue:
             return self.queue.get_nowait()
         return None
 
-    def get_batch(self):
-
+    def batch(self, batch_size=8):
+        """
+        return a batch of images
+        """
         with self.lock:
             input_batch = list(self.queue.queue)
             self.queue.queue.clear()
 
-        if len(input_batch) > self.batch_size:    #количество кадров пришло больше чем максимальный размер батча делаем ресемплинг
-            step = len(input_batch) / self.batch_size
+        if len(input_batch) > batch_size:    #количество кадров пришло больше чем максимальный размер батча делаем ресемплинг
+            step = len(input_batch) / batch_size
             resampled = []
-            for i in range(self.batch_size):
+            for i in range(batch_size):
                 resampled.append(input_batch[int(i * step)])
             
             return resampled

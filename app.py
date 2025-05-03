@@ -4,9 +4,6 @@ from collections import deque
 from queue import Empty, Queue
 from time import sleep
 
-# import onnxruntime as ort
-
-
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
@@ -24,84 +21,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from consumers import OnnxRunner, VideoThread
+from consumers import OnnxThread, VideoThread
+from render import Render
 from model_onnx import get_providers
 from resample_queue import ResampleQueue
-
-
-class Renderer(QThread):
-    change_pixmap_signal = pyqtSignal(QImage)
-
-    def __init__(self, frame_queue, width, height, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.source = frame_queue
-        self.width = width
-        self.height = height
-
-        self.update_interval = 30
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_frame)
-        self.timer.setInterval(self.update_interval)
-        self.timer.start()
-        self.fifo_fill_level = 20
-        self.cnt = 0
-        self._run_flag = False
-        self.frame_fps = deque(maxlen=10)
-
-    def reset_buf(self):
-        self.source.queue.clear()
-
-    def fps(self):
-        if len(self.frame_fps):
-            return sum(self.frame_fps) / len(self.frame_fps)
-
-        return 0
-
-    def update_frame(self):
-        try:
-            frame = self.source.get_nowait()
-
-            h, w, ch = frame.shape
-            bytes_per_line = ch * w
-            convert_to_Qt_format = QImage(
-                frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888
-            )
-            p = convert_to_Qt_format.scaled(self.width, self.height)
-            self.change_pixmap_signal.emit(p)
-
-        except Empty:
-            return
-
-        mean_fill = self.source.qsize()
-        self.cnt += 1
-
-        if self.cnt % 10 == 0:
-            error = mean_fill - self.fifo_fill_level
-            err = error * 0.002
-            self.update_interval *= 1 - err
-            self.update_interval = int(self.update_interval)
-
-            if self.update_interval < 5:
-                self.update_interval = 5
-
-            if self.update_interval > 120:
-                self.update_interval = 120
-
-            self.frame_fps.append(1000 / self.update_interval)
-
-            self.timer.setInterval(self.update_interval)
-
-        sleep(0.01)
-
-    def run(self):
-        while self._run_flag:
-            sleep(0.1)
-
-    def stop(self):
-        self._run_flag = True
-
 
 class cQLineEdit(QLineEdit):
     clicked = pyqtSignal()
@@ -233,28 +156,27 @@ class VideoWindow(QMainWindow):
         self.render_source = Queue()
         self.video_thread = None
         self.onnx_thread = None
+        self.render = None
 
     def update_slider_position(self, pos):
         self.time_slider.blockSignals(True)
         self.time_slider.setValue(pos)
         self.time_slider.blockSignals(False)
 
-        total_duration = self.video_thread.duration()
+        duration = self.video_thread.duration
 
-        total_secs = total_duration * pos / 1000
-        mins = int(total_secs // 60)
-        secs = int(total_secs % 60)
-
-        total_mins = int(total_duration // 60)
-        total_secs = int(total_duration % 60)
+        pos = duration * pos / 1000
+        mins = int(pos // 60)
+        secs = int(pos % 60)
 
         self.time_label.setText(
-            f"{mins}:{str(secs).zfill(2)} / {total_mins}:{total_secs}"
+            f"{mins}:{str(secs).zfill(2)} / {str(duration // 60).zfill(2)}:{str(duration % 60).zfill(2)}"
         )
 
     def on_time_changed(self, pos):
         self.video_thread.set_position(pos)
-        self.render.reset_buf()
+        if self.render:
+            self.render.reset_buf()
 
     def start_video(self):
         if not self.video_source.text():
@@ -274,13 +196,14 @@ class VideoWindow(QMainWindow):
 
         self.video_thread = VideoThread(self.frame_queue, self.video_source.text())
         self.video_thread.position_signal.connect(self.update_slider_position)
-        self.video_thread.start()
 
-        self.onnx_thread = OnnxRunner(self.frame_queue, self.render_source, **onnx_cfg)
-        self.onnx_thread.start()
+        self.onnx_thread = OnnxThread(self.frame_queue, self.render_source, **onnx_cfg)
 
-        self.render = Renderer(self.render_source, 1920 // 2, 1080 // 2)
+        self.render = Render(self.render_source, 1920 // 2, 1080 // 2)
         self.render.change_pixmap_signal.connect(self.update_image)
+
+        self.onnx_thread.start()
+        self.video_thread.start()
         self.render.start()
 
         self.timer.timeout.connect(self.print_fps)
@@ -299,8 +222,7 @@ class VideoWindow(QMainWindow):
 
         if self.render:
             self.render.stop()
-            self.render.quit()
-            self.render.wait()
+
 
     def choose_model_folder(self):
         options = QFileDialog.Option.DontUseNativeDialog
@@ -327,8 +249,8 @@ class VideoWindow(QMainWindow):
 
     def print_fps(self):
         if self.onnx_thread and self.render:
-            self.perf_label.setText(f"Network: {self.onnx_thread.fps()} FPS")
-            self.video_fps.setText(f"Rendering: {self.render.fps():.2f} FPS")
+            self.perf_label.setText(f"Network: {self.onnx_thread.fps} FPS")
+            self.video_fps.setText(f"Rendering: {self.render.fps:.2f} FPS")
 
     def update_image(self, cv_img):
         self.qt_img = QPixmap.fromImage(cv_img)
