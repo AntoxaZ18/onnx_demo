@@ -5,7 +5,7 @@ from time import time, sleep
 from queue import Empty, Queue
 
 class Render(QThread):
-    change_pixmap_signal = pyqtSignal(QImage)
+    update_pixmap_signal = pyqtSignal(QImage)
 
     def __init__(self, imput_queue: Queue, width: int, height: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -46,7 +46,7 @@ class Render(QThread):
                 frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888
             )
             p = convert_to_Qt_format.scaled(self.width, self.height)
-            self.change_pixmap_signal.emit(p)
+            self.update_pixmap_signal.emit(p)
 
         except Empty:
             return

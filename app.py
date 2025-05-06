@@ -1,11 +1,9 @@
 import os
 import sys
-from collections import deque
-from queue import Empty, Queue
-from time import sleep
+from queue import Queue
 
-from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -22,9 +20,10 @@ from PyQt6.QtWidgets import (
 )
 
 from consumers import OnnxThread, VideoThread
-from render import Render
 from model_onnx import get_providers
+from render import Render
 from resample_queue import ResampleQueue
+
 
 class cQLineEdit(QLineEdit):
     """
@@ -59,7 +58,7 @@ class VideoWindow(QMainWindow):
         self.file_label = QLabel(self)
         self.file_label.setText("Видеофайл")
         self.video_source = cQLineEdit(self.central_widget)
-        self.video_source.clicked.connect(self.choose_sorce)
+        self.video_source.clicked.connect(self.choose_source)
 
         self.models_label = QLabel(self)
         self.models_label.setText("Модели")
@@ -74,9 +73,9 @@ class VideoWindow(QMainWindow):
             [i for i in os.listdir(self.model_folder.text()) if i.endswith(".onnx")]
         )
 
+        #confidence
         self.conf_value = QLabel(self)
         self.conf_value.setText("Confidence %")
-
         self.conf = QSlider(self)
         self.conf.setOrientation(Qt.Orientation.Horizontal)
         self.conf.setMaximum(100)
@@ -88,6 +87,7 @@ class VideoWindow(QMainWindow):
             lambda value: self.conf_value.setText(f"Confidence {self.conf.value()} %")
         )
 
+        #providers
         self.device_label.setText("Устройство (CUDA 11.8)")
         self.perf_mode = QComboBox()
         self.perf_mode.addItems(get_providers())
@@ -203,14 +203,14 @@ class VideoWindow(QMainWindow):
         self.onnx_thread = OnnxThread(self.frame_queue, self.render_queue, **onnx_cfg)
 
         self.render_thread = Render(self.render_queue, 1920 // 2, 1080 // 2)
-        self.render_thread.change_pixmap_signal.connect(self.update_image)
+        self.render_thread.update_pixmap_signal.connect(self.refresh_image) #update image on updating frame
 
         self.onnx_thread.start()
         self.video_thread.start()
         self.render_thread.start()
 
-        self.timer.timeout.connect(self.print_fps)
-        self.timer.start(1000)  # время обновления FPS
+        self.timer.timeout.connect(self.update_fps)
+        self.timer.start(1000)  # время обновления FPS in ms
 
     def stop_video(self):
         if self.video_thread:
@@ -236,8 +236,9 @@ class VideoWindow(QMainWindow):
             self.model_file.clear()
             onnx_files = [i for i in os.listdir(folder_path) if i.endswith(".onnx")]
             self.model_file.addItems(onnx_files)
+            self.model_folder.setText(folder_path)
 
-    def choose_sorce(self):
+    def choose_source(self):
         options = QFileDialog.Option.DontUseNativeDialog
         file_name, _ = QFileDialog.getOpenFileName(
             self,
@@ -250,12 +251,12 @@ class VideoWindow(QMainWindow):
         if file_name:
             self.video_source.setText(file_name)
 
-    def print_fps(self):
+    def update_fps(self):
         if self.onnx_thread and self.render_thread:
             self.perf_label.setText(f"Network: {self.onnx_thread.fps} FPS")
             self.video_fps.setText(f"Rendering: {self.render_thread.fps:.2f} FPS")
 
-    def update_image(self, cv_img):
+    def refresh_image(self, cv_img):
         self.qt_img = QPixmap.fromImage(cv_img)
         self.image_label.setPixmap(self.qt_img)
         original_size = self.qt_img.size()

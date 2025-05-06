@@ -8,8 +8,10 @@ from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from tracker import TrackerInput, ByteTracker
 
 def get_providers():
+    """
+    return available providers (only cpu and cuda supplied)
+    """
     providers = [i for i in ort.get_available_providers() if any(val in i for val in ('CUDA', 'CPU'))]
-    print(ort.get_available_providers())
     modes = {
         'CUDAExecutionProvider': 'gpu',
         'CPUExecutionProvider': 'cpu'
@@ -19,13 +21,14 @@ def get_providers():
 
 
 class YoloONNX():
-    def __init__(self, path: str, session_options=None, device='cpu', batch=1, confidence=0.5) -> None:
+    def __init__(self, path: str, session_options=None, device='cpu', batch=1, confidence=0.5, labels=None) -> None:
+
+        if not labels:
+            raise ValueError('Provide non empty list in "labels" parameter')
 
         sess_options = ort.SessionOptions()
-
+        #optimize onnx provider parameters
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        # # sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
-
         sess_options.execution_mode  = ort.ExecutionMode.ORT_SEQUENTIAL
         sess_options.inter_op_num_threads = 3
 
@@ -37,8 +40,6 @@ class YoloONNX():
             self.mode = 'cpu'
         
         self.session = ort.InferenceSession(path, providers=sess_providers, sess_options=sess_options)    #'CUDAExecutionProvider',
-        model_inputs = self.session.get_inputs()
-        input_shape = model_inputs[0].shape
 
         self.input_width = 640
         self.input_height = 640
@@ -46,8 +47,7 @@ class YoloONNX():
 
         self.iou = 0.8
         self.confidence_thres = confidence
-        self.input_size = (640, 640)
-        self.classes = ['cars', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+        self.classes = labels
         self.color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
         self.executor = ThreadPoolExecutor(max_workers=self.batch)
 
@@ -59,7 +59,7 @@ class YoloONNX():
         pads = [img[1] for img in images]
         
         imgs = np.stack(imgs)
-        imgs = np.ascontiguousarray(imgs)  # contiguous
+        imgs = np.ascontiguousarray(imgs)  # contiguous array for better performance
 
         imgs = imgs[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW, (n, 3, h, w)
         imgs = imgs.astype(np.float32) / 255.0
@@ -87,7 +87,6 @@ class YoloONNX():
         # Expand the dimensions of the image data to match the expected input shape
         image_data = np.expand_dims(image_data, axis=0).astype(np.float32)
 
-        # Return the preprocessed image data
         return image_data, pad
     
     def letterbox(self, img: np.ndarray, new_shape: Tuple[int, int] = (640, 640)) -> Tuple[np.ndarray, Tuple[int, int]]:
@@ -173,11 +172,7 @@ class YoloONNX():
 
         outputs = np.transpose(np.squeeze(output[0]))
 
-        # Calculate the scaling factors for the bounding box coordinates
-        input_height = self.input_size[0]
-        input_width = self.input_size[0]
-
-        gain = np.float32(min(input_height / self.img_height, input_width / self.img_width))
+        gain = np.float32(min(self.input_height / self.img_height, self.input_width / self.img_width))
         outputs[:, 0] -= pad[1]
         outputs[:, 1] -= pad[0]
 
@@ -250,7 +245,7 @@ class YoloONNX():
         return self.draw(image_batch, results)
 
 
-    def process(self, image):
+    def process(self, image: np.ndarray):
         tensor, pad = self._image_preprocess(image)
         output_name = self.session.get_outputs()[0].name
         input_name = self.session.get_inputs()[0].name

@@ -125,7 +125,7 @@ class OnnxThread(QThread):
         else:
             self.batch = 8  # 8images batch for gpu
         self.model = YoloONNX(
-            onnx_model, device=device_mode, batch=self.batch, confidence=confidence
+            onnx_model, device=device_mode, batch=self.batch, confidence=confidence, labels=['Top']
         )
 
         self.fps_deq = deque(maxlen=10) #mean of last 10 fpr measure  
