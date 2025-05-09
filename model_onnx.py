@@ -297,33 +297,40 @@ class YoloONNX():
     
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    print(ort.get_available_providers())
+#     print(ort.get_available_providers())
 
-    batch_images = 12
+#     batch_images = 12
 
-    nano = 'yolo11n_5epoch_16batch640.onnx'
-    small = 'y11_100ep16b640.onnx'
+#     nano = 'nano_yolo_16b640p_2704.onnx'
+#     small = 'y11_100ep16b640.onnx'
 
-    model = YoloONNX(small, device='cpu', batch = batch_images)
+#     model = YoloONNX(nano, device='cpu', batch = batch_images, labels=['car'])
 
-    frame = cv2.imread('test.jpg')
-    image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#     frame = cv2.imread('test.jpg')
+#     image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    images = [image_rgb] * batch_images
-    process_imgs = model(images)
+#     img = model.letterbox(image_rgb)
+#     cv2.imshow('frame', img[0])
+#     while True:
+#         if cv2.waitKey(1) & 0xFF == ord('q'):
+#             break
+#     cv2.destroyAllWindows()
 
-    print(ort.get_available_providers())
+    # images = [image_rgb] * batch_images
+    # process_imgs = model(images)
 
-    cv2.startWindowThread()
+    # print(ort.get_available_providers())
 
-    cv2.namedWindow('frame', cv2.WINDOW_AUTOSIZE)
-    cv2.imshow('frame', process_imgs[0])
-    while True:
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-    cv2.destroyAllWindows()
+    # cv2.startWindowThread()
+
+    # cv2.namedWindow('frame', cv2.WINDOW_AUTOSIZE)
+    # cv2.imshow('frame', process_imgs[0])
+    # while True:
+    #     if cv2.waitKey(1) & 0xFF == ord('q'):
+    #         break
+    # cv2.destroyAllWindows()
 
     # cv2.imwrite('out.jpg', process_imgs[0])
     # cv2.imshow('0', process_imgs[0])
